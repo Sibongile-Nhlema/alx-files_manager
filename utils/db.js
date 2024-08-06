@@ -49,18 +49,6 @@ class DBClient {
     return this.countDocuments('files');
   }
 
-  async findUserByEmail(email) {
-    const db = await this.getDb();
-    const collection = db.collection('users');
-    return collection.findOne({ email });
-  }
-
-  async createUser(user) {
-    const db = await this.getDb();
-    const collection = db.collection('users');
-    const result = await collection.insertOne(user);
-    return result.ops[0];
-  }
 }
 
 const dbClient = new DBClient();
