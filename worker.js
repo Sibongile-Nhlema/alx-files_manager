@@ -2,8 +2,8 @@ import Bull from 'bull';
 import fs from 'fs';
 import path from 'path';
 import imageThumbnail from 'image-thumbnail';
-import dbClient from './utils/db';
 import { ObjectId } from 'mongodb';
+import dbClient from './utils/db';
 
 const fileQueue = new Bull('fileQueue', {
   redis: { host: process.env.REDIS_HOST, port: process.env.REDIS_PORT },
