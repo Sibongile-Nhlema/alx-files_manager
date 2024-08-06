@@ -4,12 +4,23 @@ import { v4 as uuidv4 } from 'uuid';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 import { ObjectId } from 'mongodb';
+import mime from 'mime-types';
+import { imageThumbnail } from 'image-thumbnail';
+import Bull from 'bull';
 
 const FOLDER_PATH = process.env.FOLDER_PATH || '/tmp/files_manager';
 
 if (!fs.existsSync(FOLDER_PATH)) {
   fs.mkdirSync(FOLDER_PATH, { recursive: true });
 }
+
+// Create the Bull queue for file processing
+const fileQueue = new Bull('fileQueue', {
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: process.env.REDIS_PORT || 6379,
+  },
+});
 
 class FilesController {
   // Handle file upload
@@ -209,6 +220,7 @@ class FilesController {
   static async getFile(req, res) {
     const token = req.headers['x-token'];
     const { id } = req.params;
+    const { size } = req.query;
 
     try {
       // Retrieve the user based on the token
@@ -237,14 +249,32 @@ class FilesController {
           return res.status(400).json({ error: 'A folder doesn’t have content' });
         }
 
-        // Check if the file is locally present
-        if (file.localPath && fs.existsSync(file.localPath)) {
-          const fileContent = fs.readFileSync(file.localPath);
-          const mimeType = mime.lookup(file.name) || 'application/octet-stream';
-          res.setHeader('Content-Type', mimeType);
-          res.status(200).send(fileContent);
+        // Handle thumbnail sizes
+        if (size) {
+          const validSizes = [100, 250, 500];
+          if (!validSizes.includes(parseInt(size))) {
+            return res.status(400).json({ error: 'Invalid size parameter' });
+          }
+
+          const thumbnailPath = path.join(FOLDER_PATH, `${file.localPath}_${size}`);
+          if (fs.existsSync(thumbnailPath)) {
+            const fileContent = fs.readFileSync(thumbnailPath);
+            const mimeType = mime.lookup(file.name) || 'application/octet-stream';
+            res.setHeader('Content-Type', mimeType);
+            res.status(200).send(fileContent);
+          } else {
+            return res.status(404).json({ error: 'Not found' });
+          }
         } else {
-          return res.status(404).json({ error: 'Not found' });
+          // Handle original file
+          if (file.localPath && fs.existsSync(file.localPath)) {
+            const fileContent = fs.readFileSync(file.localPath);
+            const mimeType = mime.lookup(file.name) || 'application/octet-stream';
+            res.setHeader('Content-Type', mimeType);
+            res.status(200).send(fileContent);
+          } else {
+            return res.status(404).json({ error: 'Not found' });
+          }
         }
       } else {
         // If no token is provided, check for public files
