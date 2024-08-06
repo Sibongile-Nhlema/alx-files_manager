@@ -3,7 +3,6 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
 import mime from 'mime-types';
-import { imageThumbnail } from 'image-thumbnail';
 import Bull from 'bull';
 import redisClient from '../utils/redis';
 import dbClient from '../utils/db';
@@ -73,6 +72,11 @@ class FilesController {
       // Write file data to local storage
       const buffer = Buffer.from(data, 'base64');
       fs.writeFileSync(localPath, buffer);
+
+      await fileQueue.add({
+        userId,
+        fileId,
+      });
     }
 
     try {
@@ -91,10 +95,10 @@ class FilesController {
       const newFile = result.ops[0];
 
       // Respond with the new file
-      res.status(201).json(newFile);
+      return res.status(201).json(newFile);
     } catch (err) {
       console.error('Error during file upload:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -117,10 +121,10 @@ class FilesController {
       if (!file) {
         return res.status(404).json({ error: 'Not found' });
       }
-      res.status(200).json(file);
+      return res.status(200).json(file);
     } catch (err) {
       console.error('Error fetching file:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -147,10 +151,10 @@ class FilesController {
         .skip(skip)
         .limit(limit)
         .toArray();
-      res.status(200).json(files);
+      return res.status(200).json(files);
     } catch (err) {
       console.error('Error fetching files:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -179,10 +183,10 @@ class FilesController {
         return res.status(404).json({ error: 'Not found' });
       }
 
-      res.status(200).json(result.value);
+      return res.status(200).json(result.value);
     } catch (err) {
       console.error('Error publishing file:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -211,10 +215,10 @@ class FilesController {
         return res.status(404).json({ error: 'Not found' });
       }
 
-      res.status(200).json(result.value);
+      return res.status(200).json(result.value);
     } catch (err) {
       console.error('Error unpublishing file:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -254,7 +258,7 @@ class FilesController {
         // Handle thumbnail sizes
         if (size) {
           const validSizes = [100, 250, 500];
-          if (!validSizes.includes(parseInt(size))) {
+          if (!validSizes.includes(parseInt(size, 10))) {
             return res.status(400).json({ error: 'Invalid size parameter' });
           }
 
@@ -263,49 +267,44 @@ class FilesController {
             const fileContent = fs.readFileSync(thumbnailPath);
             const mimeType = mime.lookup(file.name) || 'application/octet-stream';
             res.setHeader('Content-Type', mimeType);
-            res.status(200).send(fileContent);
-          } else {
-            return res.status(404).json({ error: 'Not found' });
+            return res.status(200).send(fileContent);
           }
-        } else {
-          // Handle original file
-          if (file.localPath && fs.existsSync(file.localPath)) {
-            const fileContent = fs.readFileSync(file.localPath);
-            const mimeType = mime.lookup(file.name) || 'application/octet-stream';
-            res.setHeader('Content-Type', mimeType);
-            res.status(200).send(fileContent);
-          } else {
-            return res.status(404).json({ error: 'Not found' });
-          }
-        }
-      } else {
-        // If no token is provided, check for public files
-        const file = await dbClient.db.collection('files').findOne({ _id: new ObjectId(id) });
-
-        if (!file) {
           return res.status(404).json({ error: 'Not found' });
         }
-
-        if (!file.isPublic) {
-          return res.status(404).json({ error: 'Not found' });
-        }
-
-        if (file.type === 'folder') {
-          return res.status(400).json({ error: 'A folder doesn’t have content' });
-        }
-
+        // Handle original file
         if (file.localPath && fs.existsSync(file.localPath)) {
           const fileContent = fs.readFileSync(file.localPath);
           const mimeType = mime.lookup(file.name) || 'application/octet-stream';
           res.setHeader('Content-Type', mimeType);
-          res.status(200).send(fileContent);
-        } else {
-          return res.status(404).json({ error: 'Not found' });
+          return res.status(200).send(fileContent);
         }
+        return res.status(404).json({ error: 'Not found' });
       }
+      // If no token is provided, check for public files
+      const file = await dbClient.db.collection('files').findOne({ _id: new ObjectId(id) });
+
+      if (!file) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      if (!file.isPublic) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      if (file.type === 'folder') {
+        return res.status(400).json({ error: 'A folder doesn’t have content' });
+      }
+
+      if (file.localPath && fs.existsSync(file.localPath)) {
+        const fileContent = fs.readFileSync(file.localPath);
+        const mimeType = mime.lookup(file.name) || 'application/octet-stream';
+        res.setHeader('Content-Type', mimeType);
+        return res.status(200).send(fileContent);
+      }
+      return res.status(404).json({ error: 'Not found' });
     } catch (err) {
       console.error('Error retrieving file data:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 }
