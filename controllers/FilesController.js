@@ -3,7 +3,6 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
 import mime from 'mime-types';
-import { imageThumbnail } from 'image-thumbnail';
 import Bull from 'bull';
 import redisClient from '../utils/redis';
 import dbClient from '../utils/db';
@@ -73,6 +72,11 @@ class FilesController {
       // Write file data to local storage
       const buffer = Buffer.from(data, 'base64');
       fs.writeFileSync(localPath, buffer);
+
+      await fileQueue.add({
+        userId,
+        fileId,
+      });
     }
 
     try {
