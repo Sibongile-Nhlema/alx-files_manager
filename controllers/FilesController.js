@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
 import { ObjectId } from 'mongodb';
 import mime from 'mime-types';
 import { imageThumbnail } from 'image-thumbnail';
 import Bull from 'bull';
+import redisClient from '../utils/redis';
+import dbClient from '../utils/db';
 
 const FOLDER_PATH = process.env.FOLDER_PATH || '/tmp/files_manager';
 
@@ -39,7 +39,9 @@ class FilesController {
     }
 
     // Get file details from request body
-    const { name, type, parentId = 0, isPublic = false, data } = req.body;
+    const {
+      name, type, parentId = 0, isPublic = false, data,
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Missing name' });
@@ -170,7 +172,7 @@ class FilesController {
       const result = await dbClient.db.collection('files').findOneAndUpdate(
         { _id: new ObjectId(id), userId },
         { $set: { isPublic: true } },
-        { returnOriginal: false }
+        { returnOriginal: false },
       );
 
       if (!result.value) {
@@ -202,7 +204,7 @@ class FilesController {
       const result = await dbClient.db.collection('files').findOneAndUpdate(
         { _id: new ObjectId(id), userId },
         { $set: { isPublic: false } },
-        { returnOriginal: false }
+        { returnOriginal: false },
       );
 
       if (!result.value) {
