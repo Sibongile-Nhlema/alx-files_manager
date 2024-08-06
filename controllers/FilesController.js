@@ -254,7 +254,7 @@ class FilesController {
         // Handle thumbnail sizes
         if (size) {
           const validSizes = [100, 250, 500];
-          if (!validSizes.includes(parseInt(size))) {
+          if (!validSizes.includes(parseInt(size, 10))) {
             return res.status(400).json({ error: 'Invalid size parameter' });
           }
 
