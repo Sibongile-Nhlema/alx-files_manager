@@ -1,6 +1,7 @@
 import { promisify } from 'util';
 import { createClient } from 'redis';
 
+
 class RedisClient {
   constructor() {
     this.client = createClient();
@@ -17,6 +18,7 @@ class RedisClient {
   isAlive() {
     return this.isClientConnected;
   }
+
 
   async get(key) {
     return promisify(this.client.GET).bind(this.client)(key);
