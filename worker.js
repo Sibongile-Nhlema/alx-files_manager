@@ -10,6 +10,7 @@ const writeFileAsync = promisify(writeFile);
 const fileQueue = new Queue('thumbnail generation');
 const userQueue = new Queue('email sending');
 
+
 const generateThumbnail = async (filePath, size) => {
   const buffer = await imgThumbnail(filePath, { width: size });
   console.log(`Generating file: ${filePath}, size: ${size}`);
