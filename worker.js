@@ -1,39 +1,67 @@
-import Bull from 'bull';
-import fs from 'fs';
-import path from 'path';
-import imageThumbnail from 'image-thumbnail';
-import { ObjectId } from 'mongodb';
-import dbClient from './utils/db';
+import { writeFile } from 'fs';
+import { promisify } from 'util';
+import Queue from 'bull/lib/queue';
+import imgThumbnail from 'image-thumbnail';
+import mongoDBCore from 'mongodb/lib/core';
+import { dbClient } from './utils/db';
+import Mailer from './utils/welcomeMail';
 
-const fileQueue = new Bull('fileQueue', {
-  redis: { host: process.env.REDIS_HOST, port: process.env.REDIS_PORT },
+const writeFileAsync = promisify(writeFile);
+const fileQueue = new Queue('thumbnail generation');
+const userQueue = new Queue('email sending');
+
+
+const generateThumbnail = async (filePath, size) => {
+  const buffer = await imgThumbnail(filePath, { width: size });
+  console.log(`Generating file: ${filePath}, size: ${size}`);
+  return writeFileAsync(`${filePath}_${size}`, buffer);
+};
+
+fileQueue.process(async (job, done) => {
+  const fileId = job.data.fileId || null;
+  const userId = job.data.userId || null;
+
+  if (!fileId) {
+    throw new Error('Missing fileId');
+  }
+  if (!userId) {
+    throw new Error('Missing userId');
+  }
+  console.log('Processing', job.data.name || '');
+  const file = await (await dbClient.filesCollection())
+    .findOne({
+      _id: new mongoDBCore.BSON.ObjectId(fileId),
+      userId: new mongoDBCore.BSON.ObjectId(userId),
+    });
+  if (!file) {
+    throw new Error('File not found');
+  }
+  const sizes = [500, 250, 100];
+  Promise.all(sizes.map((size) => generateThumbnail(file.localPath, size)))
+    .then(() => {
+      done();
+    });
 });
 
-fileQueue.process(async (job) => {
-  const { fileId, userId } = job.data;
+userQueue.process(async (job, done) => {
+  const userId = job.data.userId || null;
 
-  if (!fileId) throw new Error('Missing fileId');
-  if (!userId) throw new Error('Missing userId');
-
-  const file = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId), userId });
-
-  if (!file) throw new Error('File not found');
-
-  if (file.type !== 'image') throw new Error('Not an image file');
-
-  const filePath = path.join(process.env.FOLDER_PATH, file.localPath);
-  if (!fs.existsSync(filePath)) throw new Error('File not found');
+  if (!userId) {
+    throw new Error('Missing userId');
+  }
+  const user = await (await dbClient.usersCollection())
+    .findOne({ _id: new mongoDBCore.BSON.ObjectId(userId) });
+  if (!user) {
+    throw new Error('User not found');
+  }
+  console.log(`Welcome ${user.email}!`);
 
   try {
-    const sizes = [100, 250, 500];
-    for (const size of sizes) {
-      const thumbnail = await imageThumbnail(filePath, { width: size });
-      const thumbnailPath = path.join(process.env.FOLDER_PATH, `${fileId}_${size}`);
-      fs.writeFileSync(thumbnailPath, thumbnail);
-    }
+    const mailSubject = 'Welcome to ALX file_manager by Sibongile Nhlema!';
+    const mailContent = ['Read throught the readme to understand what the project is all about'].join('');
+    Mailer.sendMail(Mailer.buildMessage(user.email, mailSubject, mailContent));
+    done();
   } catch (err) {
-    console.error('Error generating thumbnail:', err);
+    done(err);
   }
 });
-
-console.log('Thumbnail worker started');
