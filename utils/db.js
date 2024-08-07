@@ -7,21 +7,11 @@ class DBClient {
     const database = process.env.DB_DATABASE || 'files_manager';
     const url = `mongodb://${host}:${port}`;
     this.client = new MongoClient(url, { useUnifiedTopology: true });
-    this.connected = false;
-
-    this.client.connect()
-      .then(() => {
-        this.db = this.client.db(database);
-        this.connected = true;
-      })
-      .catch((err) => {
-        console.log('MongoDB Client Error', err);
-        this.connected = false;
-      });
+    this.client.connect();
   }
 
   isAlive() {
-    return this.connected;
+    return this.client.isConnected();
   }
 
   async nbUsers() {
@@ -30,6 +20,14 @@ class DBClient {
 
   async nbFiles() {
     return this.db.collection('files').countDocuments();
+  }
+
+  async usersCollection() {
+    return this.client.db().collection('users');
+  }
+
+  async filesCollection() {
+    return this.client.db().collection('files');
   }
 }
 
